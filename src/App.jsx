@@ -127,7 +127,7 @@ const VideoChat = () => {
 
     peerInstance.current = peer;
     return peer;
-  }, []);
+  }, [localStream]);
 
   // Set up call event handlers
   const setupCallHandlers = (call) => {
