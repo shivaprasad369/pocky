@@ -19,7 +19,7 @@ const VideoChat = () => {
 
   // Open source STUN/TURN servers
   const iceServers = [
-    iceTransportPolicy: "relay",
+    // iceTransportPolicy: "relay",
     {
       urls: "turn:65.109.123.45:3478",
       username: "peeruser",
@@ -54,7 +54,12 @@ const VideoChat = () => {
         host: '0.peerjs.com', // Open source alternative: run your own PeerServer
         port: 443,
         secure: true,
-        config: { iceServers },
+        config: { iceTransportPolicy: "relay",
+          iceServers: [{
+            urls: "turn:65.109.123.45:3478",
+            username: "peeruser",
+            credential: "peeruser123"
+          }], },
         debug: 3
       });
 
