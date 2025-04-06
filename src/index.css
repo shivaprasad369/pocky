@@ -1,0 +1,89 @@
+
+
+  @tailwind base;
+  @tailwind components;
+  @tailwind utilities;
+  /* Add to your CSS */
+.transition-all-300 {
+  transition: all 0.3s ease;
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.media-error {
+  color: #d32f2f;
+  background: #ffebee;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.media-placeholder {
+  width: 100%;
+  height: 300px;
+  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #ccc;
+}
+
+.avatar-placeholder {
+  text-align: center;
+  font-size: 2rem;
+}
+
+.device-status {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+.video-chat-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  text-align: center;
+}
+
+.video-container {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.video-box {
+  width: 48%;
+}
+
+video {
+  width: 100%;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #000;
+}
+
+input {
+  padding: 8px;
+  margin: 0 10px;
+  width: 200px;
+}
+
+button {
+  padding: 8px 16px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #45a049;
+}
