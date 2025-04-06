@@ -55,14 +55,21 @@ const VideoChat = () => {
         port: 443,              // ✅ Secure port
         secure: true,           // ✅ HTTPS
         config: {
-          iceTransportPolicy: "relay",   // ✅ Forces TURN usage only
-          iceServers: [
-            {
-              urls: "turn:65.109.123.45:3478",  // ✅ Your Coturn public IP
-              username: "peeruser",
-              credential: "peeruser123"
-            }
-          ]
+        
+            iceServers: [
+              // Your TURN server
+              {
+                urls: "turn:93.184.216.34:3478",
+                username: "peeruser",
+                credential: "peeruser123"
+              },
+              // STUN server (optional but recommended)
+              {
+                urls: "stun:stun.l.google.com:19302"
+              }
+            ],
+            iceTransportPolicy: "relay" // Force TURN only (optional)
+       
         },
         debug: 3                // ✅ Useful logs
       });
