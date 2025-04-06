@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Peer from 'peerjs';
 import { v4 as uuidv4 } from 'uuid';
 import styled from 'styled-components';
 
 const VideoChat = () => {
+  // State management
   const [peerId, setPeerId] = useState('');
   const [remotePeerId, setRemotePeerId] = useState('');
   const [localStream, setLocalStream] = useState(null);
@@ -11,23 +12,34 @@ const VideoChat = () => {
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
+  const [isCallActive, setIsCallActive] = useState(false);
+
+  // Refs
   const peerInstance = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const dataConnectionRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const callRef = useRef(null);
 
-  // Open source STUN/TURN servers
-  const iceServers = [
-    // iceTransportPolicy: "relay",
-    {
-      urls: "turn:65.109.123.45:3478",
-      username: "peeruser",
-      credential: "peeruser123"
-    },
-   
-  ];
+  // ICE Servers configuration
+  const peerConfig = {
+    iceServers: [
+      // Your TURN server
+      {
+        urls: "turn:93.184.216.34:3478",
+        username: "peeruser",
+        credential: "peeruser123"
+      },
+      // STUN server (optional but recommended)
+      {
+        urls: "stun:stun.l.google.com:19302"
+      }
+    ],
+    iceTransportPolicy: "relay" // Force TURN only (optional)
+  };
 
+  // Media constraints
   const constraints = {
     audio: {
       channelCount: 2,
@@ -43,121 +55,124 @@ const VideoChat = () => {
     }
   };
 
-  useEffect(() => {
-    const initializePeer = () => {
-      const id = uuidv4().substring(0, 8); // Shorter ID for easier sharing
-      setPeerId(id);
-      console.log(id)
+  // Initialize PeerJS connection
+  const initializePeer = useCallback(() => {
+    const id = uuidv4().substring(0, 8);
+    setPeerId(id);
 
-      // Using PeerJS with our own signaling server would be better for production
-      const peer = new Peer(id, {
-        host: '0.peerjs.com',   // ✅ Using hosted PeerJS signaling server
-        port: 443,              // ✅ Secure port
-        secure: true,           // ✅ HTTPS
-        config: {
+    const peer = new Peer(id, {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
+      config: { 
+        peerConfig
+      },
+      debug: 3
+    });
+
+    peer.on('open', () => {
+      console.log('Peer connection established with ID:', id);
+      setConnectionStatus('Ready to connect');
+    });
+
+    peer.on('error', (err) => {
+      console.error('Peer error:', err);
+      setConnectionStatus(`Error: ${err.type}`);
+      
+      // Reinitialize on critical errors
+      if (['peer-unavailable', 'network', 'socket-error'].includes(err.type)) {
+        setTimeout(initializePeer, 2000);
+      }
+    });
+
+    peer.on('call', async (call) => {
+      console.log('Incoming call from:', call.peer);
+      setConnectionStatus(`Incoming call from ${call.peer}...`);
+      callRef.current = call;
+
+      try {
+        if (!localStream) {
+          await startLocalStream();
+        }
         
-            iceServers: [
-              // Your TURN server
-              {
-                urls: "turn:93.184.216.34:3478",
-                username: "peeruser",
-                credential: "peeruser123"
-              },
-              // STUN server (optional but recommended)
-              {
-                urls: "stun:stun.l.google.com:19302"
-              }
-            ],
-            iceTransportPolicy: "relay" // Force TURN only (optional)
-       
-        },
-        debug: 3                // ✅ Useful logs
+        call.answer(localStream);
+        setConnectionStatus(`Call answered with ${call.peer}`);
+        setIsCallActive(true);
+
+        setupCallHandlers(call);
+      } catch (err) {
+        console.error('Error answering call:', err);
+        setConnectionStatus(`Answer error: ${err.message}`);
+        endCall();
+      }
+    });
+
+    peer.on('connection', (conn) => {
+      console.log('Data connection established');
+      dataConnectionRef.current = conn;
+      
+      conn.on('data', (data) => {
+        setMessages(prev => [...prev, { text: data, sender: 'remote' }]);
       });
       
-
-      peer.on('open', () => {
-        console.log('Peer connection open');
-        setConnectionStatus('Ready');
+      conn.on('close', () => {
+        console.log('Data connection closed');
+        dataConnectionRef.current = null;
       });
+    });
 
-      peer.on('error', (err) => {
-        console.error('Peer error:', err);
-        setConnectionStatus(`Error: ${err.type}`);
-      });
-
-      peer.on('call', async (call) => {
-        setConnectionStatus('Incoming call...');
-        try {
-          if (!localStream) {
-            await startLocalStream();
-          }
-          call.answer(localStream);
-          setConnectionStatus('Call answered');
-
-          call.on('stream', (remoteStream) => {
-            setRemoteStream(remoteStream);
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = remoteStream;
-            }
-            setConnectionStatus('Connected');
-          });
-
-          call.on('close', () => {
-            setConnectionStatus('Call ended');
-            setRemoteStream(null);
-          });
-
-          call.on('error', (err) => {
-            console.error('Call error:', err);
-            setConnectionStatus(`Call error: ${err.message}`);
-          });
-        } catch (err) {
-          console.error('Error answering call:', err);
-          setConnectionStatus(`Error answering call: ${err.message}`);
-        }
-      });
-
-      peer.on('connection', (conn) => {
-        dataConnectionRef.current = conn;
-        conn.on('open', () => {
-          console.log('Data connection opened');
-        });
-        conn.on('data', (data) => {
-          setMessages(prev => [...prev, { text: data, sender: 'remote' }]);
-        });
-        conn.on('close', () => {
-          console.log('Data connection closed');
-        });
-      });
-
-      peerInstance.current = peer;
-    };
-
-    initializePeer();
-
-    return () => {
-      if (peerInstance.current && !peerInstance.current.destroyed) {
-        peerInstance.current.destroy();
-      }
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-    };
+    peerInstance.current = peer;
+    return peer;
   }, [localStream]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  // Set up call event handlers
+  const setupCallHandlers = (call) => {
+    call.on('stream', (remoteStream) => {
+      console.log('Received remote stream');
+      setRemoteStream(remoteStream);
+      setIsCallActive(true);
+      
+      // Handle stream attachment with retry logic
+      const attachStream = () => {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch(e => {
+            console.log('Video play error:', e);
+            setTimeout(attachStream, 100);
+          });
+        } else {
+          setTimeout(attachStream, 100);
+        }
+      };
+      attachStream();
+      
+      setConnectionStatus('Connected - Video streaming');
+    });
 
+    call.on('close', () => {
+      console.log('Call ended');
+      endCall();
+    });
+
+    call.on('error', (err) => {
+      console.error('Call error:', err);
+      setConnectionStatus(`Call error: ${err.message}`);
+      endCall();
+    });
+  };
+
+  // Start local media stream
   const startLocalStream = async () => {
     try {
       setConnectionStatus('Starting local stream...');
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log(peerId)
       setLocalStream(stream);
+      
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(e => console.log('Local video play error:', e));
       }
+      
       setConnectionStatus('Local stream ready');
       return stream;
     } catch (error) {
@@ -167,36 +182,33 @@ const VideoChat = () => {
     }
   };
 
+  // Call a remote peer
   const callRemotePeer = async () => {
     if (!remotePeerId.trim()) {
-      alert('Enter a valid remote peer ID');
+      alert('Please enter a valid remote peer ID');
       return;
     }
 
     try {
-      setConnectionStatus('Calling...');
+      setConnectionStatus(`Calling ${remotePeerId}...`);
+      
       if (!localStream) {
         await startLocalStream();
       }
 
+      if (!peerInstance.current) {
+        throw new Error('Peer connection not ready');
+      }
+
       const call = peerInstance.current.call(remotePeerId, localStream);
-      call.on('stream', (remoteStream) => {
-        setRemoteStream(remoteStream);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        }
-        setConnectionStatus('Connected');
-      });
+      callRef.current = call;
+      
+      if (!call) {
+        throw new Error('Failed to initiate call');
+      }
 
-      call.on('close', () => {
-        setConnectionStatus('Call ended');
-        setRemoteStream(null);
-      });
-
-      call.on('error', (err) => {
-        console.error('Call error:', err);
-        setConnectionStatus(`Call error: ${err.message}`);
-      });
+      setupCallHandlers(call);
+      setIsCallActive(true);
 
       // Set up data channel
       const conn = peerInstance.current.connect(remotePeerId, {
@@ -204,63 +216,118 @@ const VideoChat = () => {
         serialization: 'json'
       });
 
-      dataConnectionRef.current = conn;
       conn.on('open', () => {
         console.log('Data channel opened');
+        dataConnectionRef.current = conn;
       });
+
+      conn.on('error', (err) => {
+        console.error('Data channel error:', err);
+      });
+
     } catch (err) {
-      console.error('Error calling peer:', err);
+      console.error('Call failed:', err);
       setConnectionStatus(`Call failed: ${err.message}`);
+      endCall();
     }
   };
 
+  // End current call
+  const endCall = () => {
+    if (callRef.current) {
+      callRef.current.close();
+      callRef.current = null;
+    }
+    
+    if (dataConnectionRef.current) {
+      dataConnectionRef.current.close();
+      dataConnectionRef.current = null;
+    }
+    
+    setRemoteStream(null);
+    setIsCallActive(false);
+    setConnectionStatus('Disconnected');
+    
+    // Reinitialize peer for new connections
+    initializePeer();
+  };
+
+  // Clean up media streams and connections
+  const cleanupMedia = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+    }
+    
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+      setRemoteStream(null);
+    }
+  };
+
+  // Send chat message
   const sendMessage = () => {
     if (!messageInput.trim() || !dataConnectionRef.current) return;
     
-    dataConnectionRef.current.send(messageInput);
-    setMessages(prev => [...prev, { text: messageInput, sender: 'local' }]);
-    setMessageInput('');
-  };
-
-  const endCall = () => {
-    if (peerInstance.current) {
-      peerInstance.current.destroy();
-      setConnectionStatus('Disconnected');
-      setRemoteStream(null);
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        setLocalStream(null);
-      }
-      // Reinitialize peer
-      const id = uuidv4().substring(0, 8);
-      setPeerId(id);
-      peerInstance.current = new Peer(id, {
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        config: { iceServers }
-      });
+    try {
+      dataConnectionRef.current.send(messageInput);
+      setMessages(prev => [...prev, { text: messageInput, sender: 'local' }]);
+      setMessageInput('');
+    } catch (err) {
+      console.error('Error sending message:', err);
     }
   };
 
+  // Copy peer ID to clipboard
   const copyToClipboard = () => {
     navigator.clipboard.writeText(peerId);
     alert('Copied to clipboard!');
   };
 
+  // Initialize component
+  useEffect(() => {
+    initializePeer();
+
+    return () => {
+      if (peerInstance.current && !peerInstance.current.destroyed) {
+        peerInstance.current.destroy();
+      }
+      cleanupMedia();
+    };
+  }, [initializePeer]);
+
+  // Scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   return (
     <Container>
-      <Header>Open Source Video Chat</Header>
+      <Header>Video Chat Application</Header>
       <Status>Status: {connectionStatus}</Status>
 
       <VideoContainer>
         <VideoBox>
           <VideoLabel>Your Video</VideoLabel>
-          <Video ref={localVideoRef} autoPlay muted playsInline />
+          <Video 
+            ref={localVideoRef} 
+            autoPlay 
+            muted 
+            playsInline
+            onError={(e) => console.error('Local video error:', e)}
+          />
         </VideoBox>
         <VideoBox>
           <VideoLabel>Remote Video</VideoLabel>
-          <Video ref={remoteVideoRef} autoPlay playsInline />
+          <Video 
+            ref={remoteVideoRef} 
+            autoPlay 
+            playsInline
+            onError={(e) => console.error('Remote video error:', e)}
+          />
+          {!remoteStream && (
+            <EmptyState>Waiting for remote connection...</EmptyState>
+          )}
         </VideoBox>
       </VideoContainer>
 
@@ -278,12 +345,23 @@ const VideoChat = () => {
           onChange={(e) => setMessageInput(e.target.value)}
           placeholder="Type a message..."
           onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+          disabled={!isCallActive}
         />
-        <SendButton onClick={sendMessage}>Send</SendButton>
+        <SendButton 
+          onClick={sendMessage} 
+          disabled={!isCallActive}
+        >
+          Send
+        </SendButton>
       </ChatContainer>
 
       <Controls>
-        <Button onClick={startLocalStream}>Start Video</Button>
+        <Button 
+          onClick={startLocalStream} 
+          disabled={!!localStream}
+        >
+          {localStream ? 'Camera Active' : 'Start Camera'}
+        </Button>
         <PeerId>
           Your ID: <strong>{peerId}</strong>
           <CopyButton onClick={copyToClipboard}>Copy</CopyButton>
@@ -293,9 +371,21 @@ const VideoChat = () => {
           value={remotePeerId}
           onChange={(e) => setRemotePeerId(e.target.value)}
           placeholder="Enter remote peer ID"
+          disabled={isCallActive}
         />
-        <Button onClick={callRemotePeer}>Call</Button>
-        <Button onClick={endCall}>End Call</Button>
+        <Button 
+          onClick={callRemotePeer} 
+          disabled={!remotePeerId.trim() || isCallActive}
+        >
+          Call
+        </Button>
+        <Button 
+          onClick={endCall} 
+          disabled={!isCallActive}
+          danger
+        >
+          End Call
+        </Button>
       </Controls>
     </Container>
   );
@@ -312,6 +402,7 @@ const Container = styled.div`
 const Header = styled.h1`
   text-align: center;
   color: #2c3e50;
+  margin-bottom: 20px;
 `;
 
 const Status = styled.div`
@@ -319,6 +410,9 @@ const Status = styled.div`
   margin: 10px 0;
   font-weight: bold;
   color: #7f8c8d;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
 `;
 
 const VideoContainer = styled.div`
@@ -338,17 +432,31 @@ const VideoBox = styled.div`
   border-radius: 8px;
   padding: 10px;
   background: #ecf0f1;
+  position: relative;
+  min-height: 300px;
 `;
 
 const VideoLabel = styled.h3`
   margin-top: 0;
   color: #2c3e50;
+  text-align: center;
 `;
 
 const Video = styled.video`
   width: 100%;
+  height: auto;
   border-radius: 4px;
   background: #000;
+  transform: rotateY(180deg); /* Fixes mirror effect */
+`;
+
+const EmptyState = styled.div`
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #7f8c8d;
+  font-size: 1.2rem;
 `;
 
 const Controls = styled.div`
@@ -357,19 +465,26 @@ const Controls = styled.div`
   gap: 10px;
   margin: 20px 0;
   justify-content: center;
+  align-items: center;
 `;
 
 const Button = styled.button`
   padding: 10px 15px;
-  background: #3498db;
+  background: ${props => props.danger ? '#e74c3c' : '#3498db'};
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-weight: bold;
+  min-width: 120px;
 
   &:hover {
-    background: #2980b9;
+    background: ${props => props.danger ? '#c0392b' : '#2980b9'};
+  }
+
+  &:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
   }
 `;
 
@@ -400,6 +515,10 @@ const Input = styled.input`
   border: 1px solid #bdc3c7;
   border-radius: 4px;
   min-width: 200px;
+
+  &:disabled {
+    background: #ecf0f1;
+  }
 `;
 
 const ChatContainer = styled.div`
@@ -432,7 +551,7 @@ const Message = styled.div`
 `;
 
 const MessageInput = styled.input`
-  width: 70%;
+  flex: 1;
   padding: 10px;
   border: 1px solid #bdc3c7;
   border-radius: 4px;
@@ -449,6 +568,11 @@ const SendButton = styled.button`
 
   &:hover {
     background: #27ae60;
+  }
+
+  &:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
   }
 `;
 
