@@ -26,7 +26,7 @@ const VideoChat = () => {
   const iceServers = [
     { urls: "stun:stun.l.google.com:19302" },
     {
-      urls: "turn:localhost:3478",
+      urls: "turn:65.109.123.45:3478",
       username: "peeruser",
       credential: "peeruser123"
     },
