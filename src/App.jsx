@@ -19,14 +19,13 @@ const VideoChat = () => {
 
   // Open source STUN/TURN servers
   const iceServers = [
+    iceTransportPolicy: "relay",
     {
       urls: "turn:65.109.123.45:3478",
       username: "peeruser",
       credential: "peeruser123"
     },
-    {
-      urls: "stun:stun.l.google.com:19302"
-    }
+   
   ];
 
   const constraints = {
@@ -127,7 +126,7 @@ const VideoChat = () => {
         localStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [localStream,PeerId]);
+  }, [localStream]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
