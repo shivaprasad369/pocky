@@ -51,17 +51,22 @@ const VideoChat = () => {
 
       // Using PeerJS with our own signaling server would be better for production
       const peer = new Peer(id, {
-        host: '0.peerjs.com', // Open source alternative: run your own PeerServer
-        port: 443,
-        secure: true,
-        config: { iceTransportPolicy: "relay",
-          iceServers: [{
-            urls: "turn:65.109.123.45:3478",
-            username: "peeruser",
-            credential: "peeruser123"
-          }], },
-        debug: 3
+        host: '0.peerjs.com',   // ✅ Using hosted PeerJS signaling server
+        port: 443,              // ✅ Secure port
+        secure: true,           // ✅ HTTPS
+        config: {
+          iceTransportPolicy: "relay",   // ✅ Forces TURN usage only
+          iceServers: [
+            {
+              urls: "turn:65.109.123.45:3478",  // ✅ Your Coturn public IP
+              username: "peeruser",
+              credential: "peeruser123"
+            }
+          ]
+        },
+        debug: 3                // ✅ Useful logs
       });
+      
 
       peer.on('open', () => {
         console.log('Peer connection open');
