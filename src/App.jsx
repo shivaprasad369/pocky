@@ -27,7 +27,11 @@ const VideoChat = () => {
     iceServers: [
       // Your TURN server
       {
-        urls: "turn:93.184.216.34:3478",
+        urls: [
+          "turn:93.184.216.34:3478?transport=udp",
+          "turn:93.184.216.34:3478?transport=tcp",
+          "turns:93.184.216.34:5349?transport=tcp"
+        ],
         username: "peeruser",
         credential: "peeruser123"
       },
